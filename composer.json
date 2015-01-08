@@ -1,0 +1,24 @@
+{
+    "name": "silversurfer7/sendgrid-api-client",
+    "type": "library",
+    "version": "1.0",
+    "description": "API client library for accessing sendgrid APIs",
+    "keywords": ["api"],
+    "homepage": "https://github.com/silversurfer7/sendgrid-api-client",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Stephan Schulze",
+            "email": "sschulze@silversurfer7.de"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "guzzle/http": "~3.9"
+    },
+    "autoload": {
+        "psr-0": {
+            "SendgridApiClient": "src/"
+        }
+    }
+}
