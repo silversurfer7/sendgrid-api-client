@@ -7,6 +7,6 @@
 namespace Silversurfer7\Sendgrid\Api\Client\Exception;
 
 
-class ApiCallParameterErrorException extends AbstractRequestException {
+class ApiCallFailedException extends AbstractRequestException {
 
 } 

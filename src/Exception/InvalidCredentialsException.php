@@ -7,6 +7,6 @@
 namespace Silversurfer7\Sendgrid\Api\Client\Exception;
 
 
-class InvalidCredentialsException extends \Exception {
+class InvalidCredentialsException extends AbstractRequestException {
 
 } 

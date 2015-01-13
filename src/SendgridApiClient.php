@@ -9,11 +9,12 @@ namespace Silversurfer7\Sendgrid\Api\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Message\ResponseInterface;
 use GuzzleHttp\Post\PostBody;
 use GuzzleHttp\Subscriber\Log\LogSubscriber;
 use Psr\Log\LoggerInterface;
-use Silversurfer7\Sendgrid\Api\Client\Exception\ApiCallNotSuccessfulException;
+use Silversurfer7\Sendgrid\Api\Client\Exception\ApiCallFailedException;
 use Silversurfer7\Sendgrid\Api\Client\Exception\ApiCallParameterErrorException;
 use Silversurfer7\Sendgrid\Api\Client\Exception\InvalidCredentialsException;
 use Silversurfer7\Sendgrid\Api\Client\Exception\UnknownResponseStatusCodeException;
@@ -41,7 +42,6 @@ class SendgridApiClient {
         if (!is_array($connectionOptions)) {
             throw new \InvalidArgumentException('connectionOptions must be an array');
         }
-
         $this->initializeCredentials($login, $password);
         $this->logger = $this->getLoggerOrNullLogger($logger);
         $client = $this->initializeHttpConnector($connectionOptions);
@@ -106,44 +106,74 @@ class SendgridApiClient {
         if (!isset($connectorOptions['timeout']) || !is_int($connectorOptions['timeout'])) {
             $connectorOptions['timeout'] = self::REQUEST_TIMEOUT;
         }
-
         if (!isset($connectorOptions['allow_redirects']) || !is_bool($connectorOptions['allow_redirects'])) {
             $connectorOptions['allow_redirects'] = false;
         }
 
+        $connectorOptions['base_url'] = self::API_URL;
 
-        $client = new Client(self::API_URL, $connectorOptions);
+        $client = new Client($connectorOptions);
         return $client;
     }
 
     public function setClient(ClientInterface $client) {
         $client->getEmitter()->attach(new LogSubscriber($this->logger));
         $this->client = $client;
+    }
 
+    public function getClient() {
+        return $this->client;
     }
 
     public function run($url, array $data) {
 
         $url .= '.json';
+        $request = $this->createRequest($url, $data);
 
-        $data['api_user'] = $this->login;
-        $data['api_key']  = $this->password;
-
-        $postBody = new PostBody();
-        $postBody->replaceFields($data);
-
-        $request = $this->client->createRequest('POST', $url);
-        $request->setBody($postBody);
-
-        $response = $this->client->send($request);
+        try {
+            $response = $this->client->send($request);
+        }
+        catch (ClientException  $e) {
+            $response = $e->getResponse();
+        }
 
         return $this->parseResponse($response);
     }
 
+    /**
+     * @param $url
+     * @param array $data
+     * @return \GuzzleHttp\Message\RequestInterface
+     */
+    protected function createRequest($url, array $data) {
+        $postBody = $this->createPostBody($data);
+        $request = $this->client->createRequest('POST', $url);
+        $request->setBody($postBody);
+        return $request;
+    }
+
+    /**
+     * @param array $data
+     * @return PostBody
+     */
+    protected function createPostBody(array $data) {
+        $data['api_user'] = $this->login;
+        $data['api_key']  = $this->password;
+        $postBody = new PostBody();
+        $postBody->replaceFields($data);
+        return $postBody;
+    }
+
+    /**
+     * @param ResponseInterface $response
+     * @return mixed|null
+     * @throws Exception\UnknownResponseStatusCodeException|Exception\ApiCallFailedException|Exception\ApiCallParameterErrorException
+     */
     public function parseResponse(ResponseInterface $response) {
 
         $statusCode = $response->getStatusCode();
-        $statusCodeBeginning = substr(0,1, $statusCode);
+        $statusCodeBeginning = substr((string) $statusCode, 0,1);
+
         if ($statusCodeBeginning == '5') {
             return $this->handleRequestFailed($response);
         }
@@ -154,37 +184,47 @@ class SendgridApiClient {
             return $this->handleRequestSuccessful($response);
         }
 
-        throw new UnknownResponseStatusCodeException('API responded with HTTPCode: ' . $statusCode . ' which could not be handled');
+        $errorMessage = $this->getResponseErrorMessage($response);
+        throw new UnknownResponseStatusCodeException('API responded with: ' . $errorMessage . '', $response->getStatusCode());
     }
 
     /**
      * @param ResponseInterface $response
-     * @throws Exception\ApiCallNotSuccessfulException
+     * @throws Exception\ApiCallFailedException
      */
-    public function handleRequestFailed(ResponseInterface $response) {
-        throw new ApiCallNotSuccessfulException('HTTPCode: ' . $response->getStatusCode() . '. Please try again later.');
+    protected function handleRequestFailed(ResponseInterface $response) {
+        $errorMessage = $this->getResponseErrorMessage($response);
+        throw new ApiCallFailedException('API responsed with: ' . $errorMessage . '. Please try again later.', $response->getStatusCode());
     }
 
     /**
      * @param ResponseInterface $response
      * @throws Exception\ApiCallParameterErrorException
      */
-    public function handleRequestError(ResponseInterface $response) {
+    protected function handleRequestError(ResponseInterface $response) {
+        $errorMessage = $this->getResponseErrorMessage($response);
+        throw new ApiCallParameterErrorException('Error Description: ' . $errorMessage, $response->getStatusCode());
+    }
 
+    /**
+     * @param ResponseInterface $response
+     * @return mixed|null
+     */
+    protected function handleRequestSuccessful(ResponseInterface $response) {
+        return $response->json();
+    }
+
+
+    private function getResponseErrorMessage(ResponseInterface $response) {
         $responseData = $response->json();
         $errorMessages = $responseData['message'];
 
         if (isset($responseData['errors'])) {
             $errorMessages = implode('; ', $responseData['errors']);
         }
-        throw new ApiCallParameterErrorException('Error Description: ' . $errorMessages);
-    }
-
-    /**
-     * @param ResponseInterface $response
-     * @return \GuzzleHttp\Stream\StreamInterface|null
-     */
-    public function handleRequestSuccessful(ResponseInterface $response) {
-        return $response->json();
+        if (isset($responseData['error'])) {
+            $errorMessages = $responseData['error'];
+        }
+        return $errorMessages;
     }
 }

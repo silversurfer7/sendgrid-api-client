@@ -7,6 +7,6 @@
 namespace Silversurfer7\Sendgrid\Api\Client\Exception;
 
 
-class UnknownResponseStatusCodeException extends \Exception{
+class UnknownResponseStatusCodeException extends AbstractRequestException{
 
 } 
