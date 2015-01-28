@@ -8,8 +8,10 @@ namespace Silversurfer7\Sendgrid\Api\Client;
 
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Query;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ServerException;
 use GuzzleHttp\Message\ResponseInterface;
 use GuzzleHttp\Post\PostBody;
 use GuzzleHttp\Subscriber\Log\LogSubscriber;
@@ -126,14 +128,17 @@ class SendgridApiClient {
     }
 
     public function run($url, array $data) {
-
         $url .= '.json';
         $request = $this->createRequest($url, $data);
+        $this->logger->info('Sending Request: ' . (string) $request);
 
         try {
             $response = $this->client->send($request);
         }
         catch (ClientException  $e) {
+            $response = $e->getResponse();
+        }
+        catch (ServerException $e) {
             $response = $e->getResponse();
         }
 
@@ -147,6 +152,7 @@ class SendgridApiClient {
      */
     protected function createRequest($url, array $data) {
         $postBody = $this->createPostBody($data);
+
         $request = $this->client->createRequest('POST', $url);
         $request->setBody($postBody);
         return $request;
@@ -161,6 +167,8 @@ class SendgridApiClient {
         $data['api_key']  = $this->password;
         $postBody = new PostBody();
         $postBody->replaceFields($data);
+        // set an aggregator that does not the array keys in that if they are numeric
+        $postBody->setAggregator(Query::phpAggregator(false));
         return $postBody;
     }
 
@@ -217,7 +225,12 @@ class SendgridApiClient {
 
     private function getResponseErrorMessage(ResponseInterface $response) {
         $responseData = $response->json();
-        $errorMessages = $responseData['message'];
+
+        $errorMessages = '';
+
+        if (isset($responseData['message'])) {
+            $errorMessages = $responseData['message'];
+        }
 
         if (isset($responseData['errors'])) {
             $errorMessages = implode('; ', $responseData['errors']);

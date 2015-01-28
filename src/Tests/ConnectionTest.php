@@ -18,7 +18,6 @@ use Silversurfer7\Sendgrid\Api\Client\SendgridApiClient;
 
 class ConnectionTest extends PHPUnit_Framework_TestCase {
 
-    private $payload;
 
     public function test4xxResponse() {
         $client = new SendgridApiClient('login', 'password');
@@ -80,7 +79,7 @@ class ConnectionTest extends PHPUnit_Framework_TestCase {
     }
 
     public function testRequest() {
-        $this->payload = array('data' => "testvalue");
+        $payload = array('data' => "testvalue");
 
         $client = new SendgridApiClient('login', 'password');
 
@@ -89,7 +88,8 @@ class ConnectionTest extends PHPUnit_Framework_TestCase {
             ->getMock();
 
         $mockClient->expects($this->any())->method('send')->with($this->callback(function (RequestInterface $request) {
-                    $tmpData = $request->getBody()->getContents();
+
+                    $tmpData = (string) $request->getBody();
                     $this->assertContains('data=', $tmpData);
                     $this->assertContains('=testvalue', $tmpData);
                     $this->assertContains('login', $tmpData);
@@ -105,7 +105,40 @@ class ConnectionTest extends PHPUnit_Framework_TestCase {
 
         $client->setClient($mockClient);
 
-        $client->run('mocking/test', $this->payload);
+        $client->run('mocking/test', $payload);
+    }
+
+    public function testRequestArray() {
+
+
+        $payload = array('data' => array(
+            array('key1' => 'value1'),
+            array('key2' => 'value2')
+
+        ));
+
+        $client = new SendgridApiClient('login', 'password');
+
+        $mockClient = $this->getMockBuilder('\GuzzleHttp\Client')
+            ->setMethods(array('send'))
+            ->getMock();
+
+        $mockClient->expects($this->any())->method('send')->with($this->callback(function (RequestInterface $request) {
+                    $tmpData = (string) $request->getBody();
+                    $tmpData = urldecode($tmpData);
+                    $this->assertContains('data[][key1]', $tmpData);
+                    $this->assertNotContains('data[0]', $tmpData);
+                    $this->assertStringEndsWith('mocking/test.json', $request->getUrl());
+                    return true;
+
+                }))
+            ->willReturn($this->createResponse(200, json_encode(array('message' => 'OK'))))
+        ;
+
+        $client->setClient($mockClient);
+
+        $client->run('mocking/test', $payload);
+
     }
 
 
@@ -116,4 +149,4 @@ class ConnectionTest extends PHPUnit_Framework_TestCase {
         return $response;
     }
 
-} 
+}
