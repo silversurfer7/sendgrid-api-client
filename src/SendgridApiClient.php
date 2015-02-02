@@ -130,8 +130,6 @@ class SendgridApiClient {
     public function run($url, array $data) {
         $url .= '.json';
         $request = $this->createRequest($url, $data);
-        $this->logger->info('Sending Request: ' . (string) $request);
-
         try {
             $response = $this->client->send($request);
         }
@@ -141,7 +139,6 @@ class SendgridApiClient {
         catch (ServerException $e) {
             $response = $e->getResponse();
         }
-
         return $this->parseResponse($response);
     }
 
@@ -152,7 +149,6 @@ class SendgridApiClient {
      */
     protected function createRequest($url, array $data) {
         $postBody = $this->createPostBody($data);
-
         $request = $this->client->createRequest('POST', $url);
         $request->setBody($postBody);
         return $request;
